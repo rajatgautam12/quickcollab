@@ -9,7 +9,7 @@
     font-size: 1.875rem;
     font-weight: 700;
     color: #1f2937;
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
   }
   
   .error {
@@ -21,32 +21,156 @@
     font-weight: 500;
   }
   
-  .taskList {
-    display: grid;
-    gap: 1.5rem;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  .createButton,
+  .enableDragButton {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    margin-bottom: 1rem;
+    margin-right: 1rem;
   }
   
-  .taskCard {
+  .createButton {
+    background-color: #10b981;
+    color: white;
+  }
+  
+  .createButton:hover {
+    background-color: #059669;
+  }
+  
+  .enableDragButton {
+    background-color: #8b5cf6;
+    color: white;
+  }
+  
+  .enableDragButton:hover {
+    background-color: #7c3aed;
+  }
+  
+  .createForm {
     background: white;
     padding: 1.5rem;
     border-radius: 0.5rem;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .board {
+    display: flex;
+    gap: 1.5rem;
+    overflow-x: auto;
+    padding-bottom: 1rem;
+  }
+  
+  .column {
+    flex: 1;
+    min-width: 250px;
+    background: #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    min-height: 400px;
+  }
+  
+  .columnTitle {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 1rem;
+    text-align: center;
+  }
+  
+  .taskCard {
+    background: white;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    cursor: move;
+  }
+  
+  .taskCard:hover {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
   }
   
   .taskTitle {
-    font-size: 1.25rem;
-    font-weight: 600;
+    font-size: 1.125rem;
+    font-weight: 500;
     color: #1f2937;
     margin-bottom: 0.5rem;
   }
   
+  .taskDescription {
+    font-size: 0.875rem;
+    color: #4b5563;
+    margin-bottom: 0.5rem;
+  }
+  
+  .taskActions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .editButton,
+  .deleteButton,
+  .saveButton,
+  .cancelButton {
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+  }
+  
+  .editButton {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+  }
+  
+  .deleteButton {
+    background-color: #ef4444;
+    color: white;
+    border: none;
+  }
+  
+  .saveButton {
+    background-color: #22c55e;
+    color: white;
+    border: none;
+  }
+  
+  .cancelButton {
+    background-color: #6b7280;
+    color: white;
+    border: none;
+  }
+  
+  .editForm,
+  .createForm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .input,
+  .textarea,
   .statusSelect {
-    width: 100%;
     padding: 0.5rem;
     border: 1px solid #d1d5db;
     border-radius: 0.5rem;
-    font-size: 1rem;
+    font-size: 0.875rem;
+  }
+  
+  .textarea {
+    min-height: 80px;
+    resize: vertical;
   }
   
   /* Mobile (320px - 767px) */
@@ -57,8 +181,14 @@
     .title {
       font-size: 1.5rem;
     }
-    .taskList {
-      grid-template-columns: 1fr;
+    .board {
+      flex-direction: column;
+    }
+    .column {
+      min-width: 100%;
+    }
+    .createForm {
+      padding: 1rem;
     }
   }
   
