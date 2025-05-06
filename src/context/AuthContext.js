@@ -7,7 +7,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [socket, setSocket] = useState(null);
 
-  const API_URL = process.env.VITE_API_URL || 'http://localhost:5000';
+  const API_URL = process.env.VITE_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
 
   useEffect(() => {
     const token = localStorage.getItem('token');
