@@ -11,7 +11,7 @@ function TaskModal({ task, onClose, socket, onUpdateTask }) {
     dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
     tags: task.tags?.join(', ') || '',
   });
-  const API_URL = process.env.VITE_API_URL || 'http://localhost:5000';
+  const API_URL = process.env.VITE_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
 
   useEffect(() => {
     const fetchComments = async () => {
