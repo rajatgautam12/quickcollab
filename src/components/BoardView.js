@@ -75,7 +75,7 @@ function BoardView({ socket }) {
       });
       setShowComments((prev) => {
         const newShowComments = { ...prev };
-        delete newShowComments[taskId];
+        delete newComments[taskId];
         return newShowComments;
       });
     });
@@ -230,18 +230,34 @@ function BoardView({ socket }) {
       setError('Please log in to add a comment');
       return;
     }
-    if (!newComment[taskId]?.trim()) return;
+    const content = newComment[taskId]?.trim();
+    if (!content) {
+      setError('Comment cannot be empty');
+      return;
+    }
+    if (!/^[0-9a-fA-F]{24}$/.test(taskId)) {
+      setError('Invalid task ID');
+      console.error('Invalid taskId:', taskId);
+      return;
+    }
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError('Authentication token missing');
+      return;
+    }
     try {
+      console.log('Sending comment payload:', { content, taskId });
       const res = await axios.post(
         `${API_URL}/comments`,
-        { content: newComment[taskId], taskId },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+        { content, taskId },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       socket.emit('commentAdded', res.data);
       setNewComment((prev) => ({ ...prev, [taskId]: '' }));
     } catch (err) {
-      setError('Failed to add comment');
-      console.error('Add comment error:', err);
+      const errorMessage = err.response?.data?.message || 'Failed to add comment';
+      setError(errorMessage);
+      console.error('Add comment error:', err.response?.data || err);
     }
   }, [user, newComment, socket]);
 
