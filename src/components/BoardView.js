@@ -75,7 +75,7 @@ function BoardView({ socket }) {
       });
       setShowComments((prev) => {
         const newShowComments = { ...prev };
-        delete newComments[taskId];
+        delete newShowComments[taskId];
         return newShowComments;
       });
     });
@@ -252,7 +252,6 @@ function BoardView({ socket }) {
         { content, taskId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      console.log("gjjh", res);
       socket.emit('commentAdded', res.data);
       setNewComment((prev) => ({ ...prev, [taskId]: '' }));
     } catch (err) {
