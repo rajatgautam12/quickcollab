@@ -13,7 +13,7 @@ function BoardView({ socket }) {
   const [editForm, setEditForm] = useState({ title: '', description: '' });
   const [createForm, setCreateForm] = useState({ title: '', description: '', status: 'To Do' });
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  const API_URL = process.env.REACT_APP_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
   const statuses = ['To Do', 'In Progress', 'Done'];
 
   useEffect(() => {
