@@ -2,13 +2,14 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
+import styles from './Dashboard.module.css';
 
 function Dashboard() {
   const [boards, setBoards] = useState([]);
   const [title, setTitle] = useState('');
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
-  const API_URL = process.env.VITE_API_URL || 'http://localhost:5000';
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
   useEffect(() => {
     const fetchBoards = async () => {
@@ -40,34 +41,30 @@ function Dashboard() {
   };
 
   return (
-    <div className="container">
-      <div className="flex-between mb-6">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <button onClick={logout} className="button button-red">
-          Logout
-        </button>
+    <div className={styles.container}>
+      <div className={styles.header}>
+        <h1 className={styles.title}>Welcome, {user?.name || 'User'}!</h1>
+        <button onClick={logout} className={styles.logoutButton}>Logout</button>
       </div>
-      <form onSubmit={handleCreateBoard} className="mb-6">
+      <form onSubmit={handleCreateBoard} className={styles.form}>
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="New Board Title"
-          className="form-group mr-2"
+          className={styles.input}
           required
         />
-        <button type="submit" className="button button-blue">
-          Create Board
-        </button>
+        <button type="submit" className={styles.button}>Create Board</button>
       </form>
-      <div className="grid grid-md-3">
+      <div className={styles.boardGrid}>
         {boards.map((board) => (
           <div
             key={board._id}
             onClick={() => navigate(`/board/${board._id}`)}
-            className="board-card"
+            className={styles.boardCard}
           >
-            <h2 className="text-xl font-semibold">{board.title}</h2>
+            <h2 className={styles.boardTitle}>{board.title}</h2>
           </div>
         ))}
       </div>

@@ -1,6 +1,7 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import styles from './Register.module.css';
 
 function Register() {
   const [email, setEmail] = useState('');
@@ -11,9 +12,7 @@ function Register() {
   const { register } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  // Basic email regex for validation
   const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  // Validate form inputs
   const isFormValid = () => {
     if (!name.trim()) return 'Name is required';
     if (!isValidEmail(email)) return 'Please enter a valid email';
@@ -21,7 +20,6 @@ function Register() {
     return '';
   };
 
-  // Clear error message after 5 seconds
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(''), 5000);
@@ -32,7 +30,7 @@ function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     console.warn('REGISTRATION ATTEMPT - Email:', email);
-    if (isSubmitting) return; // Prevent double submissions
+    if (isSubmitting) return;
     const validationError = isFormValid();
     if (validationError) {
       setError(validationError);
@@ -47,7 +45,6 @@ function Register() {
       setError(errorMessage === 'User already exists'
         ? `User already exists for ${email}. Try a different email, log in, or run: curl -X DELETE "http://localhost:5000/auth/delete?email=${email}&secret=mydelete123"`
         : errorMessage);
-      // Clear form fields on error
       setEmail('');
       setPassword('');
       setName('');
@@ -56,89 +53,63 @@ function Register() {
     }
   };
 
-  const dismissError = () => {
-    setError('');
-  };
-
   return (
-    <div className="flex-center">
-      <div className="card">
-        <h2 className="text-2xl font-bold mb-6 text-center">Register</h2>
+    <div className={styles.container}>
+      <div className={styles.card}>
+        <h2 className={styles.title}>Register for QuickCollab</h2>
         {error && (
-          <div
-            className="text-error font-bold mb-4 shake"
-            style={{
-              textAlign: 'center',
-              backgroundColor: '#ffe5e5',
-              padding: '16px',
-              borderRadius: '4px',
-              border: '1px solid #dc3545',
-              fontSize: '1.1rem',
-              position: 'relative',
-            }}
-          >
+          <div className={`${styles.error} ${styles.shake}`}>
             {error}
-            <button
-              onClick={dismissError}
-              style={{
-                position: 'absolute',
-                right: '8px',
-                top: '8px',
-                background: 'none',
-                border: 'none',
-                color: '#dc3545',
-                cursor: 'pointer',
-                fontSize: '1rem',
-              }}
-            >
-              ✕
-            </button>
+            <button onClick={() => setError('')} className={styles.closeError}>✕</button>
           </div>
         )}
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Name</label>
+        <form onSubmit={handleSubmit} className={styles.form}>
+          <div className={styles.formGroup}>
+            <label htmlFor="name">Name</label>
             <input
+              id="name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="form-group"
+              className={styles.input}
               required
               autoComplete="off"
             />
           </div>
-          <div className="form-group">
-            <label>Email</label>
+          <div className={styles.formGroup}>
+            <label htmlFor="email">Email</label>
             <input
+              id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="form-group"
+              className={styles.input}
               required
               autoComplete="off"
             />
           </div>
-          <div className="form-group">
-            <label>Password</label>
+          <div className={styles.formGroup}>
+            <label htmlFor="password">Password</label>
             <input
+              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="form-group"
+              className={styles.input}
               required
               autoComplete="off"
             />
           </div>
           <button
             type="submit"
-            className="button button-blue"
+            className={styles.button}
             disabled={!!isFormValid() || isSubmitting}
           >
             {isSubmitting ? 'Registering...' : 'Register'}
           </button>
         </form>
-        <p className="text-sm text-center mt-4">
-          Already have an account? <a href="/login" className="text-blue-600 hover:underline">Log in</a>
+        <p className={styles.link}>
+          Already have an account? <a href="/login" className={styles.linkText}>Log in</a>
         </p>
       </div>
     </div>

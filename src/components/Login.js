@@ -1,6 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import styles from './Login.module.css';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -16,39 +17,50 @@ function Login() {
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed');
+      setTimeout(() => setError(''), 5000);
     }
   };
 
   return (
-    <div className="flex-center">
-      <div className="card">
-        <h2 className="text-2xl font-bold mb-6 text-center">Login</h2>
-        {error && <p className="text-error">{error}</p>}
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Email</label>
+    <div className={styles.container}>
+      <div className={styles.card}>
+        <h2 className={styles.title}>Login to QuickCollab</h2>
+        {error && (
+          <div className={`${styles.error} ${styles.shake}`}>
+            {error}
+            <button onClick={() => setError('')} className={styles.closeError}>✕</button>
+          </div>
+        )}
+        <form onSubmit={handleSubmit} className={styles.form}>
+          <div className={styles.formGroup}>
+            <label htmlFor="email">Email</label>
             <input
+              id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="form-group"
+              className={styles.input}
               required
+              autoComplete="off"
             />
           </div>
-          <div className="form-group">
-            <label>Password</label>
+          <div className={styles.formGroup}>
+            <label htmlFor="password">Password</label>
             <input
+              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="form-group"
+              className={styles.input}
               required
+              autoComplete="off"
             />
           </div>
-          <button type="submit" className="button button-blue">
-            Login
-          </button>
+          <button type="submit" className={styles.button}>Login</button>
         </form>
+        <p className={styles.link}>
+          Don't have an account? <a href="/register" className={styles.linkText}>Register</a>
+        </p>
       </div>
     </div>
   );
