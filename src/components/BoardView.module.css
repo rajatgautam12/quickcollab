@@ -22,7 +22,8 @@
   }
   
   .createButton,
-  .enableDragButton {
+  .enableDragButton,
+  .showCommentsButton {
     display: inline-block;
     padding: 0.75rem 1.5rem;
     border-radius: 0.5rem;
@@ -52,7 +53,17 @@
     background-color: #7c3aed;
   }
   
-  .createForm {
+  .showCommentsButton {
+    background-color: #6b7280;
+    color: white;
+  }
+  
+  .showCommentsButton:hover {
+    background-color: #4b5563;
+  }
+  
+  .createForm,
+  .editForm {
     background: white;
     padding: 1.5rem;
     border-radius: 0.5rem;
@@ -113,64 +124,195 @@
     margin-bottom: 0.5rem;
   }
   
+  .dueDate {
+    font-size: 0.875rem;
+    color: #1f2937;
+    background: #e6f3ff;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .dueDate::before {
+    content: '📅';
+    font-size: 1rem;
+  }
+  
   .taskActions {
     display: flex;
     gap: 0.5rem;
+    margin-bottom: 1rem;
   }
   
   .editButton,
   .deleteButton,
   .saveButton,
-  .cancelButton {
+  .cancelButton,
+  .commentButton {
     padding: 0.5rem 1rem;
     border-radius: 0.5rem;
     font-size: 0.875rem;
     cursor: pointer;
+    border: none;
   }
   
   .editButton {
     background-color: #3b82f6;
     color: white;
-    border: none;
   }
   
   .deleteButton {
     background-color: #ef4444;
     color: white;
-    border: none;
   }
   
   .saveButton {
     background-color: #22c55e;
     color: white;
-    border: none;
   }
   
   .cancelButton {
     background-color: #6b7280;
     color: white;
-    border: none;
   }
   
-  .editForm,
-  .createForm {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+  .commentButton {
+    background-color: #10b981;
+    color: white;
+  }
+  
+  .commentButton:hover {
+    background-color: #059669;
   }
   
   .input,
   .textarea,
-  .statusSelect {
+  .dateInput,
+  .statusSelect,
+  .commentInput {
     padding: 0.5rem;
     border: 1px solid #d1d5db;
     border-radius: 0.5rem;
     font-size: 0.875rem;
   }
   
+  .dateInput {
+    background: #fff;
+    cursor: pointer;
+  }
+  
   .textarea {
     min-height: 80px;
     resize: vertical;
+  }
+  
+  .commentsSection {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+  }
+  
+  .commentsList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+  }
+  
+  .comment {
+    background: #f0f9ff;
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    position: relative;
+    animation: slideIn 0.3s ease-out;
+    transition: transform 0.2s ease;
+  }
+  
+  .comment:hover {
+    transform: scale(1.02);
+  }
+  
+  .comment::before {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 20px;
+    border: 8px solid transparent;
+    border-top: 8px solid #f0f9ff;
+  }
+  
+  .commentContent {
+    font-size: 0.875rem;
+    color: #1f2937;
+    margin-bottom: 0.25rem;
+  }
+  
+  .commentMeta {
+    font-size: 0.75rem;
+    color: #6b7280;
+  }
+  
+  .noComments {
+    font-size: 0.875rem;
+    color: #6b7280;
+    font-style: italic;
+  }
+  
+  .commentForm {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  
+  .commentInput {
+    flex: 1;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    font-size: 0.875rem;
+  }
+  
+  .loading {
+    font-size: 0.875rem;
+    color: #6b7280;
+    text-align: center;
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  
+  .loading::before {
+    content: '';
+    width: 16px;
+    height: 16px;
+    border: 2px solid #6b7280;
+    border-top: 2px solid transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes slideIn {
+    from {
+      transform: translateX(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+  
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   
   /* Mobile (320px - 767px) */
@@ -187,8 +329,15 @@
     .column {
       min-width: 100%;
     }
-    .createForm {
+    .createForm,
+    .editForm {
       padding: 1rem;
+    }
+    .commentForm {
+      flex-direction: column;
+    }
+    .commentButton {
+      width: 100%;
     }
   }
   
