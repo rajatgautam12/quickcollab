@@ -7,7 +7,7 @@ function BoardView({ socket }) {
   const { boardId } = useParams();
   const [tasks, setTasks] = useState([]);
   const [error, setError] = useState('');
-  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  const API_URL = process.env.REACT_APP_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
 
   useEffect(() => {
     const fetchTasks = async () => {
