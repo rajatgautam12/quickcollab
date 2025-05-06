@@ -8,8 +8,13 @@ import Navbar from './components/Navbar';
 import { AuthContext } from './context/AuthContext';
 import io from 'socket.io-client';
 
-const socket = io(process.env.REACT_APP_API_URL || 'https://quickcollab-backend-9mdn.onrender.com', {
+const API_URL = process.env.REACT_APP_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
+console.log('Socket.IO connecting to:', API_URL);
+
+const socket = io(API_URL, {
   autoConnect: false,
+  transports: ['websocket', 'polling'], // Prioritize WebSocket
+  withCredentials: true,
 });
 
 function App() {
@@ -17,9 +22,28 @@ function App() {
 
   useEffect(() => {
     if (user) {
+      console.log('User authenticated, connecting Socket.IO');
       socket.connect();
+
+      socket.on('connect', () => {
+        console.log('Socket.IO connected:', socket.id);
+      });
+
+      socket.on('connect_error', (err) => {
+        console.error('Socket.IO connection error:', err.message);
+      });
+
+      socket.on('error', (err) => {
+        console.error('Socket.IO error:', err);
+      });
+
       setSocket(socket);
+
       return () => {
+        console.log('Disconnecting Socket.IO');
+        socket.off('connect');
+        socket.off('connect_error');
+        socket.off('error');
         socket.disconnect();
       };
     }
