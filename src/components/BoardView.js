@@ -252,6 +252,7 @@ function BoardView({ socket }) {
         { content, taskId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      console.log("gjjh", res);
       socket.emit('commentAdded', res.data);
       setNewComment((prev) => ({ ...prev, [taskId]: '' }));
     } catch (err) {

@@ -11,45 +11,73 @@ function TaskModal({ task, onClose, socket, onUpdateTask }) {
     dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
     tags: task.tags?.join(', ') || '',
   });
-  const API_URL = process.env.VITE_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
+  const [error, setError] = useState('');
+  const API_URL = process.env.REACT_APP_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
 
   useEffect(() => {
     const fetchComments = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get(`${API_URL}/comments/${task._id}`, {
+        if (!token) {
+          setError('Authentication token missing');
+          return;
+        }
+        const res = await axios.get(`${API_URL}/comments?taskId=${task._id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setComments(res.data);
       } catch (err) {
         console.error('Error fetching comments:', err);
+        setError('Failed to fetch comments');
       }
     };
     fetchComments();
 
-    socket.on('newComment', (comment) => {
+    socket.emit('joinTask', task._id);
+    socket.on('commentAdded', (comment) => {
       if (comment.task === task._id) {
-        setComments((prev) => [...prev, comment]);
+        setComments((prev) => [comment, ...prev]);
       }
     });
 
     return () => {
-      socket.off('newComment');
+      socket.emit('leaveTask', task._id);
+      socket.off('commentAdded');
     };
   }, [task._id, socket]);
 
   const handleAddComment = async (e) => {
     e.preventDefault();
+    const content = newComment.trim();
+    const taskId = task._id;
+    if (!content) {
+      setError('Comment cannot be empty');
+      return;
+    }
+    if (!/^[0-9a-fA-F]{24}$/.test(taskId)) {
+      setError('Invalid task ID');
+      console.error('Invalid taskId:', taskId);
+      return;
+    }
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError('Authentication token missing');
+      return;
+    }
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(
+      console.log('Sending comment payload:', { content, taskId });
+      const res = await axios.post(
         `${API_URL}/comments`,
-        { content: newComment, taskId: task._id },
+        { content, taskId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      socket.emit('commentAdded', res.data);
       setNewComment('');
+      setError('');
     } catch (err) {
-      console.error('Error adding comment:', err);
+      const errorMessage = err.response?.data?.message || 'Failed to add comment';
+      setError(errorMessage);
+      console.error('Add comment error:', err.response?.data || err);
     }
   };
 
@@ -62,13 +90,20 @@ function TaskModal({ task, onClose, socket, onUpdateTask }) {
       dueDate: taskDetails.dueDate,
       tags: taskDetails.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
     };
-    onUpdateTask(task._id, updates);
+    try {
+      await onUpdateTask(task._id, updates);
+      setError('');
+    } catch (err) {
+      setError('Failed to update task');
+      console.error('Update task error:', err);
+    }
   };
 
   return (
     <div className="modal">
       <div className="modal-content">
         <h2 className="text-2xl font-bold mb-4">{task.title}</h2>
+        {error && <div className="bg-red-100 text-red-700 p-2 mb-4 rounded">{error}</div>}
         <form onSubmit={handleUpdateTask} className="mb-6">
           <div className="form-group">
             <label>Title</label>
@@ -77,6 +112,7 @@ function TaskModal({ task, onClose, socket, onUpdateTask }) {
               value={taskDetails.title}
               onChange={(e) => setTaskDetails({ ...taskDetails, title: e.target.value })}
               className="form-group"
+              required
             />
           </div>
           <div className="form-group">
@@ -126,7 +162,7 @@ function TaskModal({ task, onClose, socket, onUpdateTask }) {
           <div className="comment-list">
             {comments.map((comment) => (
               <div key={comment._id} className="comment">
-                <p className="text-sm">{comment.user.name} - {new Date(comment.createdAt).toLocaleString()}</p>
+                <p className="text-sm">{comment.user.email} - {new Date(comment.createdAt).toLocaleString()}</p>
                 <p>{comment.content}</p>
               </div>
             ))}
