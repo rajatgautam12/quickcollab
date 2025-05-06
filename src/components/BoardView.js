@@ -1,147 +1,194 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
-import TaskModal from '../components/TaskModel';
+import styles from './BoardView.module.css';
 
 function BoardView({ socket }) {
   const { boardId } = useParams();
-  const [board, setBoard] = useState(null);
   const [tasks, setTasks] = useState([]);
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [newTask, setNewTask] = useState({ title: '', status: 'To Do' });
-  const API_URL = process.env.VITE_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
+  const [error, setError] = useState('');
+  const [editingTask, setEditingTask] = useState(null);
+  const [editForm, setEditForm] = useState({ title: '', description: '' });
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  const statuses = ['To Do', 'In Progress', 'Done'];
 
   useEffect(() => {
-    socket.emit('joinBoard', boardId);
-    const fetchBoard = async () => {
+    const fetchTasks = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const [boardRes, tasksRes] = await Promise.all([
-          axios.get(`${API_URL}/boards`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get(`${API_URL}/tasks/${boardId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ]);
-        const boardData = boardRes.data.find((b) => b._id === boardId);
-        setBoard(boardData);
-        setTasks(tasksRes.data);
+        const res = await axios.get(`${API_URL}/tasks?boardId=${boardId}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        });
+        setTasks(res.data);
       } catch (err) {
-        console.error('Error fetching board/tasks:', err);
+        setError('Failed to fetch tasks');
+        console.error('Fetch tasks error:', err);
       }
     };
-    fetchBoard();
+    fetchTasks();
 
-    socket.on('newComment', (comment) => {
+    socket.emit('joinBoard', boardId);
+    console.log('Emitted joinBoard:', boardId);
+
+    socket.on('taskUpdated', (updatedTask) => {
+      console.log('Received taskUpdated:', updatedTask);
       setTasks((prevTasks) =>
         prevTasks.map((task) =>
-          task._id === comment.task ? { ...task, comments: [...(task.comments || []), comment] } : task
+          task._id === updatedTask._id ? updatedTask : task
         )
       );
     });
 
-    socket.on('taskUpdated', (updatedTask) => {
+    socket.on('taskEdited', (updatedTask) => {
+      console.log('Received taskEdited:', updatedTask);
       setTasks((prevTasks) =>
-        prevTasks.map((task) => (task._id === updatedTask._id ? updatedTask : task))
+        prevTasks.map((task) =>
+          task._id === updatedTask._id ? updatedTask : task
+        )
       );
+    });
+
+    socket.on('taskDeleted', (taskId) => {
+      console.log('Received taskDeleted:', taskId);
+      setTasks((prevTasks) => prevTasks.filter((task) => task._id !== taskId));
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('BoardView Socket.IO error:', err.message);
+      setError('Real-time updates unavailable');
     });
 
     return () => {
       socket.emit('leaveBoard', boardId);
-      socket.off('newComment');
       socket.off('taskUpdated');
+      socket.off('taskEdited');
+      socket.off('taskDeleted');
+      socket.off('connect_error');
+      console.log('Emitted leaveBoard:', boardId);
     };
   }, [boardId, socket]);
 
-  const handleCreateTask = async (e) => {
+  const handleDragStart = (e, taskId) => {
+    e.dataTransfer.setData('taskId', taskId);
+    console.log('Dragging task:', taskId);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e, newStatus) => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData('taskId');
+    socket.emit('updateTask', { _id: taskId, status: newStatus, board: boardId });
+    console.log('Dropped task:', taskId, 'to status:', newStatus);
+  };
+
+  const handleEdit = (task) => {
+    setEditingTask(task._id);
+    setEditForm({ title: task.title, description: task.description || '' });
+  };
+
+  const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.post(
-        `${API_URL}/tasks`,
-        { ...newTask, boardId },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setTasks([...tasks, res.data]);
-      setNewTask({ title: '', status: 'To Do' });
-    } catch (err) {
-      console.error('Error creating task:', err);
-    }
-  };
-
-  const handleUpdateTask = async (taskId, updates) => {
-    try {
-      const token = localStorage.getItem('token');
       const res = await axios.put(
-        `${API_URL}/tasks/${taskId}`,
-        updates,
-        { headers: { Authorization: `Bearer ${token}` } }
+        `${API_URL}/tasks/${editingTask}`,
+        editForm,
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
       );
-      socket.emit('updateTask', res.data);
+      socket.emit('editTask', { _id: editingTask, ...editForm, board: boardId });
+      setEditingTask(null);
+      setEditForm({ title: '', description: '' });
     } catch (err) {
-      console.error('Error updating task:', err);
+      setError('Failed to edit task');
+      console.error('Edit task error:', err);
     }
   };
 
-  if (!board) return <div>Loading...</div>;
+  const handleDelete = async (taskId) => {
+    try {
+      await axios.delete(`${API_URL}/tasks/${taskId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      socket.emit('deleteTask', taskId, boardId);
+    } catch (err) {
+      setError('Failed to delete task');
+      console.error('Delete task error:', err);
+    }
+  };
 
   return (
-    <div className="container">
-      <h1 className="text-3xl font-bold mb-6">{board.title}</h1>
-      <form onSubmit={handleCreateTask} className="mb-6">
-        <input
-          type="text"
-          value={newTask.title}
-          onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-          placeholder="New Task Title"
-          className="form-group mr-2"
-          required
-        />
-        <select
-          value={newTask.status}
-          onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
-          className="form-group mr-2"
-        >
-          <option value="To Do">To Do</option>
-          <option value="In Progress">In Progress</option>
-          <option value="Done">Done</option>
-        </select>
-        <button type="submit" className="button button-blue">
-          Add Task
-        </button>
-      </form>
-      <div className="grid grid-md-3">
-        {['To Do', 'In Progress', 'Done'].map((status) => (
-          <div key={status} className="column">
-            <h2 className="text-xl font-semibold mb-4">{status}</h2>
+    <div className={styles.container}>
+      <h1 className={styles.title}>Board View</h1>
+      {error && <div className={styles.error}>{error}</div>}
+      <div className={styles.board}>
+        {statuses.map((status) => (
+          <div
+            key={status}
+            className={styles.column}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, status)}
+          >
+            <h2 className={styles.columnTitle}>{status}</h2>
             {tasks
               .filter((task) => task.status === status)
               .map((task) => (
                 <div
                   key={task._id}
-                  onClick={() => setSelectedTask(task)}
-                  className="task-card"
+                  className={styles.taskCard}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, task._id)}
                 >
-                  <h3 className="font-medium">{task.title}</h3>
-                  {task.dueDate && (
-                    <p className="text-sm">
-                      Due: {new Date(task.dueDate).toLocaleDateString()}
-                    </p>
+                  {editingTask === task._id ? (
+                    <form onSubmit={handleEditSubmit} className={styles.editForm}>
+                      <input
+                        type="text"
+                        value={editForm.title}
+                        onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                        placeholder="Task title"
+                        required
+                        className={styles.input}
+                      />
+                      <textarea
+                        value={editForm.description}
+                        onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                        placeholder="Task description"
+                        className={styles.textarea}
+                      />
+                      <button type="submit" className={styles.saveButton}>Save</button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingTask(null)}
+                        className={styles.cancelButton}
+                      >
+                        Cancel
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      <h3 className={styles.taskTitle}>{task.title}</h3>
+                      <p className={styles.taskDescription}>{task.description || 'No description'}</p>
+                      <div className={styles.taskActions}>
+                        <button
+                          onClick={() => handleEdit(task)}
+                          className={styles.editButton}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(task._id)}
+                          className={styles.deleteButton}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </>
                   )}
                 </div>
               ))}
           </div>
         ))}
       </div>
-      {selectedTask && (
-        <TaskModal
-          task={selectedTask}
-          onClose={() => setSelectedTask(null)}
-          socket={socket}
-          onUpdateTask={handleUpdateTask}
-        />
-      )}
     </div>
   );
 }
