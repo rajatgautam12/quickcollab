@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import { AuthContext } from '../context/AuthContext';
 import styles from './BoardView.module.css';
+import { jwtDecode } from 'jwt-decode';
 
 function BoardView({ socket }) {
   const { boardId } = useParams();
-  const { user } = useContext(AuthContext);
+  const { user, refreshToken, logout } = useContext(AuthContext);
   const [tasks, setTasks] = useState([]);
   const [comments, setComments] = useState({});
   const [error, setError] = useState('');
@@ -23,16 +24,24 @@ function BoardView({ socket }) {
   const statuses = ['To Do', 'In Progress', 'Done'];
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    console.log('BoardView init:', { userId: user?.id, token: token ? 'Present' : 'Missing' });
+
     const fetchTasks = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Authentication token missing');
+        console.error('No token for fetchTasks');
+        setIsLoadingTasks(false);
+        return;
+      }
       try {
         setIsLoadingTasks(true);
-        const res = await axios.get(`${API_URL}/tasks?boardId=${boardId}`, {
-          headers: user ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {},
-        });
+        const res = await api.get(`/tasks?boardId=${boardId}`);
         setTasks(res.data);
       } catch (err) {
         setError('Failed to fetch tasks');
-        console.error('Fetch tasks error:', err);
+        console.error('Fetch tasks error:', err.response?.data || err.message);
       } finally {
         setIsLoadingTasks(false);
       }
@@ -107,12 +116,17 @@ function BoardView({ socket }) {
   }, [boardId, socket, user, showComments]);
 
   const fetchComments = useCallback(async (taskId) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('No token for fetchComments');
+      return;
+    }
     try {
       setIsLoadingComments((prev) => ({ ...prev, [taskId]: true }));
-      const res = await axios.get(`${API_URL}/comments?taskId=${taskId}`);
+      const res = await api.get(`/comments?taskId=${taskId}`);
       setComments((prev) => ({ ...prev, [taskId]: res.data }));
     } catch (err) {
-      console.error('Fetch comments error:', err);
+      console.error('Fetch comments error:', err.response?.data || err.message);
     } finally {
       setIsLoadingComments((prev) => ({ ...prev, [taskId]: false }));
     }
@@ -159,18 +173,20 @@ function BoardView({ socket }) {
       setError('Please log in to create a task');
       return;
     }
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError('Authentication token missing');
+      console.error('No token for createTask');
+      return;
+    }
     try {
-      const res = await axios.post(
-        `${API_URL}/tasks`,
-        { ...createForm, boardId },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-      );
+      const res = await api.post('/tasks', { ...createForm, boardId });
       socket.emit('createTask', { ...createForm, board: boardId, _id: res.data._id });
       setCreateForm({ title: '', description: '', status: 'To Do', dueDate: '' });
       setShowCreateForm(false);
     } catch (err) {
       setError('Failed to create task');
-      console.error('Create task error:', err);
+      console.error('Create task error:', err.response?.data || err.message);
     }
   }, [user, createForm, boardId, socket]);
 
@@ -193,18 +209,20 @@ function BoardView({ socket }) {
       setError('Please log in to edit a task');
       return;
     }
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError('Authentication token missing');
+      console.error('No token for editTask');
+      return;
+    }
     try {
-      await axios.put(
-        `${API_URL}/tasks/${editingTask}`,
-        editForm,
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-      );
+      await api.put(`/tasks/${editingTask}`, editForm);
       socket.emit('editTask', { _id: editingTask, ...editForm, board: boardId });
       setEditingTask(null);
       setEditForm({ title: '', description: '', dueDate: '' });
     } catch (err) {
       setError('Failed to edit task');
-      console.error('Edit task error:', err);
+      console.error('Edit task error:', err.response?.data || err.message);
     }
   }, [user, editingTask, editForm, boardId, socket]);
 
@@ -213,14 +231,18 @@ function BoardView({ socket }) {
       setError('Please log in to delete a task');
       return;
     }
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError('Authentication token missing');
+      console.error('No token for deleteTask');
+      return;
+    }
     try {
-      await axios.delete(`${API_URL}/tasks/${taskId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      });
+      await api.delete(`/tasks/${taskId}`);
       socket.emit('deleteTask', taskId, boardId);
     } catch (err) {
       setError('Failed to delete task');
-      console.error('Delete task error:', err);
+      console.error('Delete task error:', err.response?.data || err.message);
     }
   }, [user, boardId, socket]);
 
@@ -240,26 +262,75 @@ function BoardView({ socket }) {
       console.error('Invalid taskId:', taskId);
       return;
     }
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!user.id) {
+      setError('User ID missing');
+      console.error('User ID not available:', user);
+      return;
+    }
+    if (!user.token) {
       setError('Authentication token missing');
+      console.error('No token in user object:', user);
       return;
     }
     try {
-      console.log('Sending comment payload:', { content, taskId });
-      const res = await axios.post(
-        `${API_URL}/comments`,
-        { content, taskId },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      socket.emit('commentAdded', res.data);
-      setNewComment((prev) => ({ ...prev, [taskId]: '' }));
+      // Validate token
+      let decoded;
+      try {
+        decoded = jwtDecode(user.token);
+        console.log('Token decoded for comment:', { payload: decoded, userId: user.id });
+        if (!decoded.id) {
+          throw new Error('Token has no valid user ID');
+        }
+        if (decoded.id !== user.id) {
+          throw new Error('Token user ID does not match AuthContext user ID');
+        }
+        if (!/^[0-9a-fA-F]{24}$/.test(decoded.id)) {
+          throw new Error('Token id is not a valid ObjectId');
+        }
+      } catch (decodeErr) {
+        console.error('Invalid token decode:', decodeErr.message);
+        setError('Invalid authentication token. Please log in again.');
+        logout();
+        return;
+      }
+
+      console.log('Sending comment payload:', { content, taskId, userId: user.id, token: user.token.slice(0, 10) + '...' });
+      let token = user.token;
+      try {
+        // Attempt to post with current token
+        const res = await api.post('/comments', { content, taskId, userId: user.id }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        socket.emit('commentAdded', res.data);
+        setNewComment((prev) => ({ ...prev, [taskId]: '' }));
+      } catch (err) {
+        if (err.response?.status === 401 && err.response?.data?.message === 'Token has expired') {
+          console.log('Token expired, attempting to refresh');
+          token = await refreshToken();
+          // Retry with new token
+          const res = await api.post('/comments', { content, taskId, userId: user.id }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          socket.emit('commentAdded', res.data);
+          setNewComment((prev) => ({ ...prev, [taskId]: '' }));
+        } else if (err.response?.status === 401 && err.response?.data?.message === 'Token is not valid: User not found') {
+          console.error('User not found for token, logging out:', { userId: user.id });
+          setError('Your account is no longer valid. Please log in again.');
+          logout();
+        } else if (err.response?.status === 401 && err.response?.data?.message === 'Token is not valid: Missing user ID') {
+          console.error('Token missing user ID, logging out:', { userId: user.id });
+          setError('Invalid authentication token. Please log in again.');
+          logout();
+        } else {
+          throw err;
+        }
+      }
     } catch (err) {
       const errorMessage = err.response?.data?.message || 'Failed to add comment';
       setError(errorMessage);
       console.error('Add comment error:', err.response?.data || err);
     }
-  }, [user, newComment, socket]);
+  }, [user, newComment, socket, refreshToken, logout]);
 
   const formatDate = useCallback((date) => {
     if (!date) return 'No due date';
