@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import io from 'socket.io-client';
-import TaskModal from './TaskModal';
+import TaskModal from '../components/TaskModel';
 import styles from './BoardView.module.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
