@@ -56,7 +56,7 @@ function App() {
         <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
         <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <Register />} />
         <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
-        <Route path="/board/:boardId" element={user ? <BoardView socket={socket} /> : <Navigate to="/login" />} />
+        <Route path="/board/:boardId" element={<BoardView socket={socket} />} />
         <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
       </Routes>
     </Router>

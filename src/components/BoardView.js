@@ -1,22 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
+import { AuthContext } from '../context/AuthContext';
 import styles from './BoardView.module.css';
 
 function BoardView({ socket }) {
   const { boardId } = useParams();
+  const { user } = useContext(AuthContext);
   const [tasks, setTasks] = useState([]);
   const [error, setError] = useState('');
   const [editingTask, setEditingTask] = useState(null);
   const [editForm, setEditForm] = useState({ title: '', description: '' });
-  const API_URL = process.env.REACT_APP_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
+  const [createForm, setCreateForm] = useState({ title: '', description: '', status: 'To Do' });
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
   const statuses = ['To Do', 'In Progress', 'Done'];
 
   useEffect(() => {
     const fetchTasks = async () => {
       try {
         const res = await axios.get(`${API_URL}/tasks?boardId=${boardId}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+          headers: user ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {},
         });
         setTasks(res.data);
       } catch (err) {
@@ -28,6 +32,11 @@ function BoardView({ socket }) {
 
     socket.emit('joinBoard', boardId);
     console.log('Emitted joinBoard:', boardId);
+
+    socket.on('taskCreated', (newTask) => {
+      console.log('Received taskCreated:', newTask);
+      setTasks((prevTasks) => [...prevTasks, newTask]);
+    });
 
     socket.on('taskUpdated', (updatedTask) => {
       console.log('Received taskUpdated:', updatedTask);
@@ -59,13 +68,14 @@ function BoardView({ socket }) {
 
     return () => {
       socket.emit('leaveBoard', boardId);
+      socket.off('taskCreated');
       socket.off('taskUpdated');
       socket.off('taskEdited');
       socket.off('taskDeleted');
       socket.off('connect_error');
       console.log('Emitted leaveBoard:', boardId);
     };
-  }, [boardId, socket]);
+  }, [boardId, socket, user]);
 
   const handleDragStart = (e, taskId) => {
     e.dataTransfer.setData('taskId', taskId);
@@ -83,15 +93,44 @@ function BoardView({ socket }) {
     console.log('Dropped task:', taskId, 'to status:', newStatus);
   };
 
+  const handleCreateSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      setError('Please log in to create a task');
+      return;
+    }
+    try {
+      const res = await axios.post(
+        `${API_URL}/tasks`,
+        { ...createForm, boardId },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      );
+      socket.emit('createTask', { ...createForm, board: boardId, _id: res.data._id });
+      setCreateForm({ title: '', description: '', status: 'To Do' });
+      setShowCreateForm(false);
+    } catch (err) {
+      setError('Failed to create task');
+      console.error('Create task error:', err);
+    }
+  };
+
   const handleEdit = (task) => {
+    if (!user) {
+      setError('Please log in to edit a task');
+      return;
+    }
     setEditingTask(task._id);
     setEditForm({ title: task.title, description: task.description || '' });
   };
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
+    if (!user) {
+      setError('Please log in to edit a task');
+      return;
+    }
     try {
-      const res = await axios.put(
+      await axios.put(
         `${API_URL}/tasks/${editingTask}`,
         editForm,
         { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
@@ -106,6 +145,10 @@ function BoardView({ socket }) {
   };
 
   const handleDelete = async (taskId) => {
+    if (!user) {
+      setError('Please log in to delete a task');
+      return;
+    }
     try {
       await axios.delete(`${API_URL}/tasks/${taskId}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
@@ -121,6 +164,42 @@ function BoardView({ socket }) {
     <div className={styles.container}>
       <h1 className={styles.title}>Board View</h1>
       {error && <div className={styles.error}>{error}</div>}
+      {user && (
+        <button
+          onClick={() => setShowCreateForm(!showCreateForm)}
+          className={styles.createButton}
+        >
+          {showCreateForm ? 'Cancel' : 'Create Task'}
+        </button>
+      )}
+      {showCreateForm && user && (
+        <form onSubmit={handleCreateSubmit} className={styles.createForm}>
+          <input
+            type="text"
+            value={createForm.title}
+            onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+            placeholder="Task title"
+            required
+            className={styles.input}
+          />
+          <textarea
+            value={createForm.description}
+            onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+            placeholder="Task description"
+            className={styles.textarea}
+          />
+          <select
+            value={createForm.status}
+            onChange={(e) => setCreateForm({ ...createForm, status: e.target.value })}
+            className={styles.statusSelect}
+          >
+            {statuses.map((status) => (
+              <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+          <button type="submit" className={styles.saveButton}>Create</button>
+        </form>
+      )}
       <div className={styles.board}>
         {statuses.map((status) => (
           <div
@@ -168,20 +247,22 @@ function BoardView({ socket }) {
                     <>
                       <h3 className={styles.taskTitle}>{task.title}</h3>
                       <p className={styles.taskDescription}>{task.description || 'No description'}</p>
-                      <div className={styles.taskActions}>
-                        <button
-                          onClick={() => handleEdit(task)}
-                          className={styles.editButton}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(task._id)}
-                          className={styles.deleteButton}
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      {user && (
+                        <div className={styles.taskActions}>
+                          <button
+                            onClick={() => handleEdit(task)}
+                            className={styles.editButton}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(task._id)}
+                            className={styles.deleteButton}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
