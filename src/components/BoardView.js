@@ -9,7 +9,7 @@ function BoardView({ socket }) {
   const [tasks, setTasks] = useState([]);
   const [selectedTask, setSelectedTask] = useState(null);
   const [newTask, setNewTask] = useState({ title: '', status: 'To Do' });
-  const API_URL = process.env.VITE_API_URL || 'http://localhost:5000';
+  const API_URL = process.env.VITE_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
 
   useEffect(() => {
     socket.emit('joinBoard', boardId);
