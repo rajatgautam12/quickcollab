@@ -1,0 +1,171 @@
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+    background: #f3f4f6;
+  }
+  
+  .title {
+    font-size: 1.875rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 2rem;
+  }
+  
+  .error {
+    background-color: #fee2e2;
+    color: #dc2626;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    font-weight: 500;
+  }
+  
+  .board {
+    display: flex;
+    gap: 1.5rem;
+    overflow-x: auto;
+    padding-bottom: 1rem;
+  }
+  
+  .column {
+    flex: 1;
+    min-width: 250px;
+    background: #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    min-height: 400px;
+  }
+  
+  .columnTitle {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 1rem;
+    text-align: center;
+  }
+  
+  .taskCard {
+    background: white;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    cursor: move;
+  }
+  
+  .taskCard:hover {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+  }
+  
+  .taskTitle {
+    font-size: 1.125rem;
+    font-weight: 500;
+    color: #1f2937;
+    margin-bottom: 0.5rem;
+  }
+  
+  .taskDescription {
+    font-size: 0.875rem;
+    color: #4b5563;
+    margin-bottom: 0.5rem;
+  }
+  
+  .taskActions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .editButton,
+  .deleteButton,
+  .saveButton,
+  .cancelButton {
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+  }
+  
+  .editButton {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+  }
+  
+  .deleteButton {
+    background-color: #ef4444;
+    color: white;
+    border: none;
+  }
+  
+  .saveButton {
+    background-color: #22c55e;
+    color: white;
+    border: none;
+  }
+  
+  .cancelButton {
+    background-color: #6b7280;
+    color: white;
+    border: none;
+  }
+  
+  .editForm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .input,
+  .textarea {
+    padding: 0.5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+  }
+  
+  .textarea {
+    min-height: 80px;
+    resize: vertical;
+  }
+  
+  /* Mobile (320px - 767px) */
+  @media (max-width: 767px) {
+    .container {
+      padding: 1rem;
+    }
+    .title {
+      font-size: 1.5rem;
+    }
+    .board {
+      flex-direction: column;
+    }
+    .column {
+      min-width: 100%;
+    }
+  }
+  
+  /* Laptop (768px - 1279px) */
+  @media (min-width: 768px) and (max-width: 1279px) {
+    .container {
+      max-width: 90%;
+    }
+  }
+  
+  /* Laptop Large (1280px - 1919px) */
+  @media (min-width: 1280px) and (max-width: 1919px) {
+    .container {
+      max-width: 1100px;
+    }
+  }
+  
+  /* 4K (1920px and above) */
+  @media (min-width: 1920px) {
+    .container {
+      max-width: 1400px;
+      padding: 3rem;
+    }
+    .title {
+      font-size: 2.25rem;
+    }
+  }

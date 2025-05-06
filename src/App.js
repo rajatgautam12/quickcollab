@@ -13,7 +13,7 @@ console.log('Socket.IO connecting to:', API_URL);
 
 const socket = io(API_URL, {
   autoConnect: false,
-  transports: ['websocket', 'polling'], // Prioritize WebSocket
+  transports: ['websocket', 'polling'],
   withCredentials: true,
 });
 
