@@ -8,7 +8,7 @@ import Navbar from './components/Navbar';
 import { AuthContext } from './context/AuthContext';
 import io from 'socket.io-client';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_URL = process.env.REACT_APP_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
 console.log('Socket.IO connecting to:', API_URL);
 
 const socket = io(API_URL, {
