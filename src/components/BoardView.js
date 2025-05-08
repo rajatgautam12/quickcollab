@@ -1,51 +1,55 @@
-import React, { useState, useEffect, useContext, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
-import api from '../api';
+import React, { useState, useEffect, useContext } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { format } from 'date-fns';
+import api from '../utils/api';
 import { AuthContext } from '../context/AuthContext';
+import io from 'socket.io-client';
 import styles from './BoardView.module.css';
-import { jwtDecode } from 'jwt-decode';
 
-function BoardView({ socket }) {
+const API_URL = process.env.REACT_APP_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
+const socket = io(API_URL, { withCredentials: true });
+
+const BoardView = () => {
   const { boardId } = useParams();
-  const { user, refreshToken, logout } = useContext(AuthContext);
+  const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const [board, setBoard] = useState(null);
   const [tasks, setTasks] = useState([]);
-  const [comments, setComments] = useState({});
   const [collaborators, setCollaborators] = useState([]);
-  const [inviteEmail, setInviteEmail] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDraggingEnabled, setIsDraggingEnabled] = useState(true);
+  const [newTask, setNewTask] = useState({
+    title: '',
+    description: '',
+    status: 'To Do',
+    dueDate: '',
+    assignedTo: '',
+  });
   const [editingTask, setEditingTask] = useState(null);
-  const [editForm, setEditForm] = useState({ title: '', description: '', dueDate: '', assignedTo: '' });
-  const [createForm, setCreateForm] = useState({ title: '', description: '', status: 'To Do', dueDate: '', assignedTo: '' });
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [isDragEnabled, setIsDragEnabled] = useState(false);
-  const [newComment, setNewComment] = useState({});
   const [showComments, setShowComments] = useState({});
-  const [isLoadingTasks, setIsLoadingTasks] = useState(true);
-  const [isLoadingComments, setIsLoadingComments] = useState({});
-  const API_URL = process.env.REACT_APP_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
-  const statuses = ['To Do', 'In Progress', 'Done'];
+  const [newComment, setNewComment] = useState({});
+  const [comments, setComments] = useState({});
+  const [inviteEmail, setInviteEmail] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    console.log('BoardView init:', { userId: user?.id, token: token ? 'Present' : 'Missing' });
+    const fetchBoard = async () => {
+      try {
+        const res = await api.get(`/boards/${boardId}`);
+        setBoard(res.data);
+      } catch (err) {
+        setError('Failed to load board');
+      }
+    };
 
     const fetchTasks = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setError('Authentication token missing');
-        console.error('No token for fetchTasks');
-        setIsLoadingTasks(false);
-        return;
-      }
       try {
-        setIsLoadingTasks(true);
         const res = await api.get(`/tasks?boardId=${boardId}`);
         setTasks(res.data);
       } catch (err) {
-        setError('Failed to fetch tasks');
-        console.error('Fetch tasks error:', err.response?.data || err.message);
-      } finally {
-        setIsLoadingTasks(false);
+        setError('Failed to load tasks');
       }
     };
 
@@ -54,84 +58,59 @@ function BoardView({ socket }) {
         const res = await api.get(`/boards/${boardId}/collaborators`);
         setCollaborators(res.data);
       } catch (err) {
-        setError('Failed to fetch collaborators');
-        console.error('Fetch collaborators error:', err.response?.data || err.message);
+        setError('Failed to load collaborators');
       }
     };
 
-    fetchTasks();
-    fetchCollaborators();
-    socket.emit('joinBoard', boardId);
-    console.log('Emitted joinBoard:', boardId);
+    const loadData = async () => {
+      setIsLoading(true);
+      await Promise.all([fetchBoard(), fetchTasks(), fetchCollaborators()]);
+      setIsLoading(false);
+    };
 
-    socket.on('taskCreated', (newTask) => {
-      console.log('Received taskCreated:', newTask);
-      setTasks((prevTasks) => [...prevTasks, newTask]);
+    loadData();
+
+    socket.emit('joinBoard', boardId);
+
+    socket.on('taskCreated', (task) => {
+      setTasks((prev) => [...prev, task]);
     });
 
     socket.on('taskUpdated', (updatedTask) => {
-      console.log('Received taskUpdated:', updatedTask);
-      setTasks((prevTasks) =>
-        prevTasks.map((task) =>
-          task._id === updatedTask._id ? updatedTask : task
-        )
+      setTasks((prev) =>
+        prev.map((task) => (task._id === updatedTask._id ? updatedTask : task))
       );
     });
 
     socket.on('taskEdited', (updatedTask) => {
-      console.log('Received taskEdited:', updatedTask);
-      setTasks((prevTasks) =>
-        prevTasks.map((task) =>
-          task._id === updatedTask._id ? updatedTask : task
-        )
+      setTasks((prev) =>
+        prev.map((task) => (task._id === updatedTask._id ? updatedTask : task))
       );
     });
 
     socket.on('taskDeleted', (taskId) => {
-      console.log('Received taskDeleted:', taskId);
-      setTasks((prevTasks) => prevTasks.filter((task) => task._id !== taskId));
-      setComments((prev) => {
-        const newComments = { ...prev };
-        delete newComments[taskId];
-        return newComments;
-      });
-      setShowComments((prev) => {
-        const newShowComments = { ...prev };
-        delete newShowComments[taskId];
-        return newShowComments;
-      });
+      setTasks((prev) => prev.filter((task) => task._id !== taskId));
     });
 
-    socket.on('commentAdded', (newComment) => {
-      console.log('Received commentAdded:', newComment);
+    socket.on('commentAdded', (comment) => {
       setComments((prev) => ({
         ...prev,
-        [newComment.task]: [newComment, ...(prev[newComment.task] || [])],
+        [comment.task]: [...(prev[comment.task] || []), comment],
       }));
     });
 
     socket.on('collaboratorAdded', (collaborator) => {
-      console.log('Received collaboratorAdded:', collaborator);
       setCollaborators((prev) => [...prev, collaborator]);
     });
 
-    socket.on('taskAssigned', (updatedTask) => {
-      console.log('Received taskAssigned:', updatedTask);
-      setTasks((prevTasks) =>
-        prevTasks.map((task) =>
-          task._id === updatedTask._id ? updatedTask : task
-        )
+    socket.on('taskAssigned', (task) => {
+      setTasks((prev) =>
+        prev.map((t) => (t._id === task._id ? task : t))
       );
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('BoardView Socket.IO error:', err.message);
-      setError('Real-time updates unavailable');
     });
 
     return () => {
       socket.emit('leaveBoard', boardId);
-      Object.keys(showComments).forEach((taskId) => socket.emit('leaveTask', taskId));
       socket.off('taskCreated');
       socket.off('taskUpdated');
       socket.off('taskEdited');
@@ -139,280 +118,154 @@ function BoardView({ socket }) {
       socket.off('commentAdded');
       socket.off('collaboratorAdded');
       socket.off('taskAssigned');
-      socket.off('connect_error');
-      console.log('Emitted leaveBoard:', boardId);
     };
-  }, [boardId, socket, user, showComments]);
+  }, [boardId]);
 
-  const fetchComments = useCallback(async (taskId) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error('No token for fetchComments');
-      return;
-    }
-    try {
-      setIsLoadingComments((prev) => ({ ...prev, [taskId]: true }));
-      const res = await api.get(`/comments?taskId=${taskId}`);
-      setComments((prev) => ({ ...prev, [taskId]: res.data }));
-    } catch (err) {
-      console.error('Fetch comments error:', err.response?.data || err.message);
-    } finally {
-      setIsLoadingComments((prev) => ({ ...prev, [taskId]: false }));
-    }
-  }, []);
+  const handleDragEnd = async (result) => {
+    if (!result.destination || !isDraggingEnabled) return;
 
-  const toggleComments = useCallback((taskId) => {
-    setShowComments((prev) => {
-      const newShowComments = { ...prev, [taskId]: !prev[taskId] };
-      if (newShowComments[taskId]) {
-        socket.emit('joinTask', taskId);
-        fetchComments(taskId);
-      } else {
-        socket.emit('leaveTask', taskId);
+    const { source, destination } = result;
+    const taskId = result.draggableId;
+    const newStatus = destination.droppableId;
+
+    if (source.droppableId !== destination.droppableId) {
+      try {
+        const updatedTask = await api.put(`/tasks/${taskId}`, { status: newStatus });
+        socket.emit('updateTask', updatedTask.data);
+      } catch (err) {
+        setError('Failed to update task status');
       }
-      return newShowComments;
-    });
-  }, [socket, fetchComments]);
-
-  const handleInvite = async (e) => {
-    e.preventDefault();
-    if (!user) {
-      setError('Please log in to invite collaborators');
-      return;
-    }
-    try {
-      const res = await api.post(`/boards/${boardId}/invite`, { email: inviteEmail });
-      socket.emit('inviteSent', { boardId, collaborator: res.data });
-      setInviteEmail('');
-      setError('');
-    } catch (err) {
-      setError('Failed to invite collaborator');
-      console.error('Invite error:', err.response?.data || err.message);
     }
   };
 
-  const handleAssignTask = async (taskId, assignedTo) => {
-    if (!user) {
-      setError('Please log in to assign tasks');
-      return;
-    }
+  const handleCreateTask = async (e) => {
+    e.preventDefault();
     try {
-      await api.put(`/tasks/${taskId}/assign`, { assignedTo });
-      socket.emit('taskAssigned', { _id: taskId, assignedTo, board: boardId });
-    } catch (err) {
-      setError('Failed to assign task');
-      console.error('Assign task error:', err.response?.data || err.message);
-    }
-  };
-
-  const handleDragStart = useCallback((e, taskId) => {
-    if (!isDragEnabled) {
-      console.log('Drag prevented: Drag-and-drop not enabled');
-      return;
-    }
-    e.dataTransfer.setData('taskId', taskId);
-    console.log('Dragging task:', taskId);
-  }, [isDragEnabled]);
-
-  const handleDragOver = useCallback((e) => {
-    if (!isDragEnabled) return;
-    e.preventDefault();
-  }, [isDragEnabled]);
-
-  const handleDrop = useCallback((e, newStatus) => {
-    if (!isDragEnabled) return;
-    e.preventDefault();
-    const taskId = e.dataTransfer.getData('taskId');
-    socket.emit('updateTask', { _id: taskId, status: newStatus, board: boardId });
-    console.log('Dropped task:', taskId, 'to status:', newStatus);
-  }, [isDragEnabled, boardId, socket]);
-
-  const handleCreateSubmit = useCallback(async (e) => {
-    e.preventDefault();
-    if (!user) {
-      setError('Please log in to create a task');
-      return;
-    }
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setError('Authentication token missing');
-      console.error('No token for createTask');
-      return;
-    }
-    try {
-      const res = await api.post('/tasks', { ...createForm, boardId });
-      socket.emit('createTask', { ...createForm, board: boardId, _id: res.data._id });
-      setCreateForm({ title: '', description: '', status: 'To Do', dueDate: '', assignedTo: '' });
+      const res = await api.post('/tasks', { ...newTask, boardId });
+      socket.emit('createTask', res.data);
+      setNewTask({ title: '', description: '', status: 'To Do', dueDate: '', assignedTo: '' });
       setShowCreateForm(false);
     } catch (err) {
       setError('Failed to create task');
-      console.error('Create task error:', err.response?.data || err.message);
     }
-  }, [user, createForm, boardId, socket]);
+  };
 
-  const handleEdit = useCallback((task) => {
-    if (!user) {
-      setError('Please log in to edit a task');
-      return;
-    }
-    setEditingTask(task._id);
-    setEditForm({
-      title: task.title,
-      description: task.description || '',
-      dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
-      assignedTo: task.assignedTo || '',
-    });
-  }, [user]);
-
-  const handleEditSubmit = useCallback(async (e) => {
+  const handleEditTask = async (e) => {
     e.preventDefault();
-    if (!user) {
-      setError('Please log in to edit a task');
-      return;
-    }
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setError('Authentication token missing');
-      console.error('No token for editTask');
-      return;
-    }
     try {
-      await api.put(`/tasks/${editingTask}`, editForm);
-      socket.emit('editTask', { _id: editingTask, ...editForm, board: boardId });
+      const res = await api.put(`/tasks/${editingTask._id}`, editingTask);
+      socket.emit('editTask', res.data);
       setEditingTask(null);
-      setEditForm({ title: '', description: '', dueDate: '', assignedTo: '' });
     } catch (err) {
-      setError('Failed to edit task');
-      console.error('Edit task error:', err.response?.data || err.message);
+      setError('Failed to update task');
     }
-  }, [user, editingTask, editForm, boardId, socket]);
+  };
 
-  const handleDelete = useCallback(async (taskId) => {
-    if (!user) {
-      setError('Please log in to delete a task');
-      return;
-    }
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setError('Authentication token missing');
-      console.error('No token for deleteTask');
-      return;
-    }
+  const handleDeleteTask = async (taskId) => {
     try {
       await api.delete(`/tasks/${taskId}`);
       socket.emit('deleteTask', taskId, boardId);
     } catch (err) {
       setError('Failed to delete task');
-      console.error('Delete task error:', err.response?.data || err.message);
     }
-  }, [user, boardId, socket]);
+  };
 
-  const handleCommentSubmit = useCallback(async (taskId, e) => {
+  const handleCommentSubmit = async (taskId, e) => {
     e.preventDefault();
-    if (!user) {
-      setError('Please log in to add a comment');
-      return;
-    }
-    const content = newComment[taskId]?.trim();
-    if (!content) {
-      setError('Comment cannot be empty');
-      return;
-    }
-    if (!/^[0-9a-fA-F]{24}$/.test(taskId)) {
-      setError('Invalid task ID');
-      console.error('Invalid taskId:', taskId);
-      return;
-    }
-    if (!user.id) {
-      setError('User ID missing');
-      console.error('User ID not available:', user);
-      return;
-    }
-    if (!user.token) {
-      setError('Authentication token missing');
-      console.error('No token in user object:', user);
-      return;
-    }
+    if (!newComment[taskId]?.trim()) return;
+
     try {
-      let decoded;
-      try {
-        decoded = jwtDecode(user.token);
-        console.log('Token decoded for comment:', { payload: decoded, userId: user.id });
-        if (!decoded.id) {
-          throw new Error('Token has no valid user ID');
-        }
-        if (decoded.id !== user.id) {
-          throw new Error('Token user ID does not match AuthContext user ID');
-        }
-        if (!/^[0-9a-fA-F]{24}$/.test(decoded.id)) {
-          throw new Error('Token id is not a valid ObjectId');
-        }
-      } catch (decodeErr) {
-        console.error('Invalid token decode:', decodeErr.message);
-        setError('Invalid authentication token. Please log in again.');
-        logout();
-        return;
-      }
-
-      console.log('Sending comment payload:', { content, taskId, userId: user.id, token: user.token.slice(0, 10) + '...' });
-      let token = user.token;
-      try {
-        const res = await api.post('/comments', { content, taskId, userId: user.id }, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        socket.emit('commentAdded', res.data);
-        setNewComment((prev) => ({ ...prev, [taskId]: '' }));
-      } catch (err) {
-        if (err.response?.status === 401 && err.response?.data?.message === 'Token has expired') {
-          console.log('Token expired, attempting to refresh');
-          token = await refreshToken();
-          const res = await api.post('/comments', { content, taskId, userId: user.id }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          socket.emit('commentAdded', res.data);
-          setNewComment((prev) => ({ ...prev, [taskId]: '' }));
-        } else if (err.response?.status === 401 && err.response?.data?.message === 'Token is not valid: User not found') {
-          console.error('User not found for token, logging out:', { userId: user.id });
-          setError('Your account is no longer valid. Please log in again.');
-          logout();
-        } else if (err.response?.status === 401 && err.response?.data?.message === 'Token is not valid: Missing user ID') {
-          console.error('Token missing user ID, logging out:', { userId: user.id });
-          setError('Invalid authentication token. Please log in again.');
-          logout();
-        } else {
-          throw err;
-        }
-      }
+      const res = await api.post('/comments', {
+        content: newComment[taskId],
+        taskId,
+        userId: user._id,
+      });
+      socket.emit('commentAdded', res.data);
+      setNewComment((prev) => ({ ...prev, [taskId]: '' }));
     } catch (err) {
-      const errorMessage = err.response?.data?.message || 'Failed to add comment';
-      setError(errorMessage);
-      console.error('Add comment error:', err.response?.data || err);
+      setError('Failed to add comment');
     }
-  }, [user, newComment, socket, refreshToken, logout]);
+  };
 
-  const formatDate = useCallback((date) => {
-    if (!date) return 'No due date';
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  }, []);
+  const fetchComments = async (taskId) => {
+    try {
+      const res = await api.get(`/comments?taskId=${taskId}`);
+      setComments((prev) => ({ ...prev, [taskId]: res.data }));
+    } catch (err) {
+      setError('Failed to load comments');
+    }
+  };
+
+  const toggleComments = (taskId) => {
+    setShowComments((prev) => ({
+      ...prev,
+      [taskId]: !prev[taskId],
+    }));
+    if (!showComments[taskId] && !comments[taskId]) {
+      fetchComments(taskId);
+    }
+  };
+
+  const handleInvite = async (e) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) {
+      setError('Please enter a valid email');
+      return;
+    }
+
+    try {
+      const res = await api.post(`/boards/${boardId}/invite`, { email: inviteEmail });
+      socket.emit('collaboratorAdded', res.data, boardId);
+      setInviteEmail('');
+      socket.emit('inviteSent', { userId: res.data.userId, boardId, boardTitle: board.title });
+    } catch (err) {
+      setError('Failed to invite collaborator');
+    }
+  };
+
+  const handleAssignTask = async (taskId, assignedTo) => {
+    try {
+      const res = await api.put(`/tasks/${taskId}/assign`, { assignedTo });
+      socket.emit('taskAssigned', res.data);
+    } catch (err) {
+      setError('Failed to assign task');
+    }
+  };
+
+  if (isLoading) {
+    return <div className={styles.loading}>Loading...</div>;
+  }
+
+  if (!board) {
+    return <div className={styles.error}>Board not found</div>;
+  }
+
+  const columns = ['To Do', 'In Progress', 'Done'];
 
   return (
     <div className={styles.container}>
-      <h1 className={styles.title}>Board View</h1>
+      <h1 className={styles.title}>{board.title}</h1>
       {error && <div className={styles.error}>{error}</div>}
+
       <div className={styles.collaboratorsSection}>
-        <h2>Collaborators</h2>
+        <h3>Collaborators</h3>
         <ul className={styles.collaboratorsList}>
           {collaborators.map((collab) => (
-            <li key={collab.userId} className={styles.collaborator}>
+            <li
+              key={collab.userId}
+              className={styles.collaborator}
+              data-initials={collab.email
+                .split('@')[0]
+                .split('.')
+                .map(word => word[0]?.toUpperCase())
+                .join('')
+                .slice(0, 2)}
+            >
               {collab.email} ({collab.role})
             </li>
           ))}
         </ul>
-        {user && (
+        {board.owner === user._id && (
           <form onSubmit={handleInvite} className={styles.inviteForm}>
             <input
               type="email"
@@ -420,60 +273,61 @@ function BoardView({ socket }) {
               onChange={(e) => setInviteEmail(e.target.value)}
               placeholder="Enter email to invite"
               className={styles.input}
-              required
             />
-            <button type="submit" className={styles.inviteButton}>Invite</button>
+            <button type="submit" className={styles.inviteButton}>
+              Invite
+            </button>
           </form>
         )}
       </div>
+
       <button
-        onClick={() => setIsDragEnabled(!isDragEnabled)}
+        onClick={() => setIsDraggingEnabled(!isDraggingEnabled)}
         className={styles.enableDragButton}
       >
-        {isDragEnabled ? 'Disable Drag-and-Drop' : 'Enable Drag-and-Drop'}
+        {isDraggingEnabled ? 'Disable Drag' : 'Enable Drag'}
       </button>
-      {user && (
-        <button
-          onClick={() => setShowCreateForm(!showCreateForm)}
-          className={styles.createButton}
-        >
-          {showCreateForm ? 'Cancel' : 'Create Task'}
-        </button>
-      )}
-      {showCreateForm && user && (
-        <form onSubmit={handleCreateSubmit} className={styles.createForm}>
+
+      <button onClick={() => setShowCreateForm(!showCreateForm)} className={styles.createButton}>
+        {showCreateForm ? 'Cancel' : 'Create Task'}
+      </button>
+
+      {showCreateForm && (
+        <form onSubmit={handleCreateTask} className={styles.createForm}>
           <input
             type="text"
-            value={createForm.title}
-            onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+            value={newTask.title}
+            onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
             placeholder="Task title"
-            required
             className={styles.input}
+            required
           />
           <textarea
-            value={createForm.description}
-            onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+            value={newTask.description}
+            onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
             placeholder="Task description"
             className={styles.textarea}
           />
+          <select
+            value={newTask.status}
+            onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
+            className={styles.statusSelect}
+          >
+            {columns.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
           <input
             type="date"
-            value={createForm.dueDate}
-            onChange={(e) => setCreateForm({ ...createForm, dueDate: e.target.value })}
+            value={newTask.dueDate}
+            onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
             className={styles.dateInput}
           />
           <select
-            value={createForm.status}
-            onChange={(e) => setCreateForm({ ...createForm, status: e.target.value })}
-            className={styles.statusSelect}
-          >
-            {statuses.map((status) => (
-              <option key={status} value={status}>{status}</option>
-            ))}
-          </select>
-          <select
-            value={createForm.assignedTo}
-            onChange={(e) => setCreateForm({ ...createForm, assignedTo: e.target.value })}
+            value={newTask.assignedTo}
+            onChange={(e) => setNewTask({ ...newTask, assignedTo: e.target.value })}
             className={styles.assignedToSelect}
           >
             <option value="">Unassigned</option>
@@ -483,158 +337,218 @@ function BoardView({ socket }) {
               </option>
             ))}
           </select>
-          <button type="submit" className={styles.saveButton}>Create</button>
+          <button type="submit" className={styles.saveButton}>
+            Create
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCreateForm(false)}
+            className={styles.cancelButton}
+          >
+            Cancel
+          </button>
         </form>
       )}
-      <div className={styles.board}>
-        {isLoadingTasks ? (
-          <div className={styles.loading}>Loading tasks...</div>
-        ) : (
-          statuses.map((status) => (
-            <div
-              key={status}
-              className={styles.column}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, status)}
-            >
-              <h2 className={styles.columnTitle}>{status}</h2>
-              {tasks
-                .filter((task) => task.status === status)
-                .map((task) => (
-                  <div
-                    key={task._id}
-                    className={styles.taskCard}
-                    draggable={isDragEnabled}
-                    onDragStart={(e) => handleDragStart(e, task._id)}
-                  >
-                    {editingTask === task._id ? (
-                      <form onSubmit={handleEditSubmit} className={styles.editForm}>
-                        <input
-                          type="text"
-                          value={editForm.title}
-                          onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                          placeholder="Task title"
-                          required
-                          className={styles.input}
-                        />
-                        <textarea
-                          value={editForm.description}
-                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                          placeholder="Task description"
-                          className={styles.textarea}
-                        />
-                        <input
-                          type="date"
-                          value={editForm.dueDate}
-                          onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
-                          className={styles.dateInput}
-                        />
-                        <select
-                          value={editForm.assignedTo}
-                          onChange={(e) => setEditForm({ ...editForm, assignedTo: e.target.value })}
-                          className={styles.assignedToSelect}
-                        >
-                          <option value="">Unassigned</option>
-                          {collaborators.map((collab) => (
-                            <option key={collab.userId} value={collab.userId}>
-                              {collab.email}
-                            </option>
-                          ))}
-                        </select>
-                        <button type="submit" className={styles.saveButton}>Save</button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingTask(null)}
-                          className={styles.cancelButton}
-                        >
-                          Cancel
-                        </button>
-                      </form>
-                    ) : (
-                      <>
-                        <h3 className={styles.taskTitle}>{task.title}</h3>
-                        <p className={styles.taskDescription}>{task.description || 'No description'}</p>
-                        <p className={styles.dueDate}>Due: {formatDate(task.dueDate)}</p>
-                        <p className={styles.assignedTo}>
-                          Assigned to: {task.assignedTo ? collaborators.find(c => c.userId === task.assignedTo)?.email || 'Unknown' : 'Unassigned'}
-                        </p>
-                        {user && (
-                          <div className={styles.taskActions}>
-                            <button
-                              onClick={() => handleEdit(task)}
-                              className={styles.editButton}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDelete(task._id)}
-                              className={styles.deleteButton}
-                            >
-                              Delete
-                            </button>
+
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <div className={styles.board}>
+          {columns.map((column) => (
+            <Droppable key={column} droppableId={column}>
+              {(provided) => (
+                <div
+                  className={styles.column}
+                  {...provided.droppableProps}
+                  ref={provided.innerRef}
+                >
+                  <h2 className={styles.columnTitle}>{column}</h2>
+                  {tasks
+                    .filter((task) => task.status === column)
+                    .map((task, index) => (
+                      <Draggable key={task._id} draggableId={task._id} index={index}>
+                        {(provided) => (
+                          <div
+                            className={`${styles.taskCard} ${
+                              provided.isDragging ? styles.dragging : ''
+                            }`}
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                          >
+                            {editingTask && editingTask._id === task._id ? (
+                              <form onSubmit={handleEditTask} className={styles.editForm}>
+                                <input
+                                  type="text"
+                                  value={editingTask.title}
+                                  onChange={(e) =>
+                                    setEditingTask({ ...editingTask, title: e.target.value })
+                                  }
+                                  className={styles.input}
+                                  required
+                                />
+                                <textarea
+                                  value={editingTask.description}
+                                  onChange={(e) =>
+                                    setEditingTask({
+                                      ...editingTask,
+                                      description: e.target.value,
+                                    })
+                                  }
+                                  className={styles.textarea}
+                                />
+                                <select
+                                  value={editingTask.status}
+                                  onChange={(e) =>
+                                    setEditingTask({ ...editingTask, status: e.target.value })
+                                  }
+                                  className={styles.statusSelect}
+                                >
+                                  {columns.map((status) => (
+                                    <option key={status} value={status}>
+                                      {status}
+                                    </option>
+                                  ))}
+                                </select>
+                                <input
+                                  type="date"
+                                  value={editingTask.dueDate}
+                                  onChange={(e) =>
+                                    setEditingTask({ ...editingTask, dueDate: e.target.value })
+                                  }
+                                  className={styles.dateInput}
+                                />
+                                <select
+                                  value={editingTask.assignedTo}
+                                  onChange={(e) =>
+                                    setEditingTask({
+                                      ...editingTask,
+                                      assignedTo: e.target.value,
+                                    })
+                                  }
+                                  className={styles.assignedToSelect}
+                                >
+                                  <option value="">Unassigned</option>
+                                  {collaborators.map((collab) => (
+                                    <option key={collab.userId} value={collab.userId}>
+                                      {collab.email}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button type="submit" className={styles.saveButton}>
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingTask(null)}
+                                  className={styles.cancelButton}
+                                >
+                                  Cancel
+                                </button>
+                              </form>
+                            ) : (
+                              <>
+                                <h3 className={styles.taskTitle}>{task.title}</h3>
+                                <p className={styles.taskDescription}>{task.description}</p>
+                                {task.dueDate && (
+                                  <p className={styles.dueDate}>
+                                    Due: {format(new Date(task.dueDate), 'MMM dd, yyyy')}
+                                  </p>
+                                )}
+                                <p className={styles.assignedTo}>
+                                  Assigned to: {task.assignedTo?.email || 'Unassigned'}
+                                </p>
+                                <div className={styles.taskActions}>
+                                  <button
+                                    onClick={() =>
+                                      setEditingTask({
+                                        _id: task._id,
+                                        title: task.title,
+                                        description: task.description,
+                                        status: task.status,
+                                        dueDate: task.dueDate
+                                          ? format(new Date(task.dueDate), 'yyyy-MM-dd')
+                                          : '',
+                                        assignedTo: task.assignedTo?._id || '',
+                                      })
+                                    }
+                                    className={styles.editButton}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteTask(task._id)}
+                                    className={styles.deleteButton}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                                <div className={styles.commentsSection}>
+                                  <button
+                                    onClick={() => toggleComments(task._id)}
+                                    className={styles.showCommentsButton}
+                                  >
+                                    {showComments[task._id] ? 'Hide Comments' : 'Show Comments'}
+                                  </button>
+                                  {showComments[task._id] && (
+                                    <div className={styles.commentsList}>
+                                      {comments[task._id]?.length > 0 ? (
+                                        comments[task._id].map((comment) => (
+                                          <div key={comment._id} className={styles.comment}>
+                                            <p className={styles.commentContent}>
+                                              {comment.content}
+                                            </p>
+                                            <p className={styles.commentMeta}>
+                                              By {comment.user?.email || 'Unknown'} on{' '}
+                                              {format(
+                                                new Date(comment.createdAt),
+                                                'MMM dd, yyyy HH:mm'
+                                              )}
+                                            </p>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <p className={styles.noComments}>No comments yet</p>
+                                      )}
+                                      <form
+                                        onSubmit={(e) => handleCommentSubmit(task._id, e)}
+                                        className={styles.commentForm}
+                                      >
+                                        <input
+                                          type="text"
+                                          value={newComment[task._id] || ''}
+                                          onChange={(e) =>
+                                            setNewComment({
+                                              ...newComment,
+                                              [task._id]: e.target.value,
+                                            })
+                                          }
+                                          placeholder="Add a comment"
+                                          className={styles.commentInput}
+                                        />
+                                        <button
+                                          type="submit"
+                                          className={styles.commentButton}
+                                        >
+                                          Comment
+                                        </button>
+                                      </form>
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            )}
                           </div>
                         )}
-                        <div className={styles.commentsSection}>
-                          <button
-                            onClick={() => toggleComments(task._id)}
-                            className={styles.showCommentsButton}
-                          >
-                            {showComments[task._id] ? 'Hide Comments' : 'Show Comments'}
-                          </button>
-                          {showComments[task._id] && (
-                            <>
-                              {isLoadingComments[task._id] ? (
-                                <div className={styles.loading}>Loading comments...</div>
-                              ) : comments[task._id]?.length > 0 ? (
-                                <div className={styles.commentsList}>
-                                  {comments[task._id].map((comment) => (
-                                    <div key={comment._id} className={styles.comment}>
-                                      <p className={styles.commentContent}>{comment.content}</p>
-                                      <p className={styles.commentMeta}>
-                                        By {comment.user.email} on{' '}
-                                        {new Date(comment.createdAt).toLocaleString()}
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className={styles.noComments}>No comments yet.</p>
-                              )}
-                              {user && (
-                                <form
-                                  onSubmit={(e) => handleCommentSubmit(task._id, e)}
-                                  className={styles.commentForm}
-                                >
-                                  <input
-                                    type="text"
-                                    value={newComment[task._id] || ''}
-                                    onChange={(e) =>
-                                      setNewComment((prev) => ({
-                                        ...prev,
-                                        [task._id]: e.target.value,
-                                      }))
-                                    }
-                                    placeholder="Add a comment..."
-                                    className={styles.commentInput}
-                                  />
-                                  <button type="submit" className={styles.commentButton}>
-                                    Post
-                                  </button>
-                                </form>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-            </div>
-          ))
-        )}
-      </div>
+                      </Draggable>
+                    ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          ))}
+        </div>
+      </DragDropContext>
     </div>
   );
-}
+};
 
 export default BoardView;
