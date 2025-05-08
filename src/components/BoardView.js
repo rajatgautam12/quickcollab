@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { format } from 'date-fns';
-import api from '../utils/api';
+import api from '../api';
 import { AuthContext } from '../context/AuthContext';
 import io from 'socket.io-client';
 import styles from './BoardView.module.css';
