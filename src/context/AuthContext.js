@@ -106,7 +106,6 @@ export const AuthProvider = ({ children }) => {
     console.log('User logged out');
   };
 
-  // Intercept 401 errors and handle User not found
   useEffect(() => {
     const interceptor = axios.interceptors.response.use(
       (response) => response,
@@ -114,7 +113,6 @@ export const AuthProvider = ({ children }) => {
         if (error.response?.status === 401 && error.response?.data?.message === 'Token has expired') {
           try {
             await refreshToken();
-            // Retry original request with new token
             const newToken = localStorage.getItem('token');
             error.config.headers.Authorization = `Bearer ${newToken}`;
             return axios(error.config);

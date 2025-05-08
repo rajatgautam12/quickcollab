@@ -65,6 +65,9 @@ function Dashboard() {
             className={styles.boardCard}
           >
             <h2 className={styles.boardTitle}>{board.title}</h2>
+            <p className={styles.boardRole}>
+              {board.owner === user.id ? 'Owner' : 'Collaborator'}
+            </p>
           </div>
         ))}
       </div>

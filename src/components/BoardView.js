@@ -10,10 +10,12 @@ function BoardView({ socket }) {
   const { user, refreshToken, logout } = useContext(AuthContext);
   const [tasks, setTasks] = useState([]);
   const [comments, setComments] = useState({});
+  const [collaborators, setCollaborators] = useState([]);
+  const [inviteEmail, setInviteEmail] = useState('');
   const [error, setError] = useState('');
   const [editingTask, setEditingTask] = useState(null);
-  const [editForm, setEditForm] = useState({ title: '', description: '', dueDate: '' });
-  const [createForm, setCreateForm] = useState({ title: '', description: '', status: 'To Do', dueDate: '' });
+  const [editForm, setEditForm] = useState({ title: '', description: '', dueDate: '', assignedTo: '' });
+  const [createForm, setCreateForm] = useState({ title: '', description: '', status: 'To Do', dueDate: '', assignedTo: '' });
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [isDragEnabled, setIsDragEnabled] = useState(false);
   const [newComment, setNewComment] = useState({});
@@ -47,7 +49,18 @@ function BoardView({ socket }) {
       }
     };
 
+    const fetchCollaborators = async () => {
+      try {
+        const res = await api.get(`/boards/${boardId}/collaborators`);
+        setCollaborators(res.data);
+      } catch (err) {
+        setError('Failed to fetch collaborators');
+        console.error('Fetch collaborators error:', err.response?.data || err.message);
+      }
+    };
+
     fetchTasks();
+    fetchCollaborators();
     socket.emit('joinBoard', boardId);
     console.log('Emitted joinBoard:', boardId);
 
@@ -97,6 +110,20 @@ function BoardView({ socket }) {
       }));
     });
 
+    socket.on('collaboratorAdded', (collaborator) => {
+      console.log('Received collaboratorAdded:', collaborator);
+      setCollaborators((prev) => [...prev, collaborator]);
+    });
+
+    socket.on('taskAssigned', (updatedTask) => {
+      console.log('Received taskAssigned:', updatedTask);
+      setTasks((prevTasks) =>
+        prevTasks.map((task) =>
+          task._id === updatedTask._id ? updatedTask : task
+        )
+      );
+    });
+
     socket.on('connect_error', (err) => {
       console.error('BoardView Socket.IO error:', err.message);
       setError('Real-time updates unavailable');
@@ -110,6 +137,8 @@ function BoardView({ socket }) {
       socket.off('taskEdited');
       socket.off('taskDeleted');
       socket.off('commentAdded');
+      socket.off('collaboratorAdded');
+      socket.off('taskAssigned');
       socket.off('connect_error');
       console.log('Emitted leaveBoard:', boardId);
     };
@@ -144,6 +173,37 @@ function BoardView({ socket }) {
       return newShowComments;
     });
   }, [socket, fetchComments]);
+
+  const handleInvite = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      setError('Please log in to invite collaborators');
+      return;
+    }
+    try {
+      const res = await api.post(`/boards/${boardId}/invite`, { email: inviteEmail });
+      socket.emit('inviteSent', { boardId, collaborator: res.data });
+      setInviteEmail('');
+      setError('');
+    } catch (err) {
+      setError('Failed to invite collaborator');
+      console.error('Invite error:', err.response?.data || err.message);
+    }
+  };
+
+  const handleAssignTask = async (taskId, assignedTo) => {
+    if (!user) {
+      setError('Please log in to assign tasks');
+      return;
+    }
+    try {
+      await api.put(`/tasks/${taskId}/assign`, { assignedTo });
+      socket.emit('taskAssigned', { _id: taskId, assignedTo, board: boardId });
+    } catch (err) {
+      setError('Failed to assign task');
+      console.error('Assign task error:', err.response?.data || err.message);
+    }
+  };
 
   const handleDragStart = useCallback((e, taskId) => {
     if (!isDragEnabled) {
@@ -182,7 +242,7 @@ function BoardView({ socket }) {
     try {
       const res = await api.post('/tasks', { ...createForm, boardId });
       socket.emit('createTask', { ...createForm, board: boardId, _id: res.data._id });
-      setCreateForm({ title: '', description: '', status: 'To Do', dueDate: '' });
+      setCreateForm({ title: '', description: '', status: 'To Do', dueDate: '', assignedTo: '' });
       setShowCreateForm(false);
     } catch (err) {
       setError('Failed to create task');
@@ -200,6 +260,7 @@ function BoardView({ socket }) {
       title: task.title,
       description: task.description || '',
       dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
+      assignedTo: task.assignedTo || '',
     });
   }, [user]);
 
@@ -219,7 +280,7 @@ function BoardView({ socket }) {
       await api.put(`/tasks/${editingTask}`, editForm);
       socket.emit('editTask', { _id: editingTask, ...editForm, board: boardId });
       setEditingTask(null);
-      setEditForm({ title: '', description: '', dueDate: '' });
+      setEditForm({ title: '', description: '', dueDate: '', assignedTo: '' });
     } catch (err) {
       setError('Failed to edit task');
       console.error('Edit task error:', err.response?.data || err.message);
@@ -273,7 +334,6 @@ function BoardView({ socket }) {
       return;
     }
     try {
-      // Validate token
       let decoded;
       try {
         decoded = jwtDecode(user.token);
@@ -297,7 +357,6 @@ function BoardView({ socket }) {
       console.log('Sending comment payload:', { content, taskId, userId: user.id, token: user.token.slice(0, 10) + '...' });
       let token = user.token;
       try {
-        // Attempt to post with current token
         const res = await api.post('/comments', { content, taskId, userId: user.id }, {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -307,7 +366,6 @@ function BoardView({ socket }) {
         if (err.response?.status === 401 && err.response?.data?.message === 'Token has expired') {
           console.log('Token expired, attempting to refresh');
           token = await refreshToken();
-          // Retry with new token
           const res = await api.post('/comments', { content, taskId, userId: user.id }, {
             headers: { Authorization: `Bearer ${token}` }
           });
@@ -345,6 +403,29 @@ function BoardView({ socket }) {
     <div className={styles.container}>
       <h1 className={styles.title}>Board View</h1>
       {error && <div className={styles.error}>{error}</div>}
+      <div className={styles.collaboratorsSection}>
+        <h2>Collaborators</h2>
+        <ul className={styles.collaboratorsList}>
+          {collaborators.map((collab) => (
+            <li key={collab.userId} className={styles.collaborator}>
+              {collab.email} ({collab.role})
+            </li>
+          ))}
+        </ul>
+        {user && (
+          <form onSubmit={handleInvite} className={styles.inviteForm}>
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="Enter email to invite"
+              className={styles.input}
+              required
+            />
+            <button type="submit" className={styles.inviteButton}>Invite</button>
+          </form>
+        )}
+      </div>
       <button
         onClick={() => setIsDragEnabled(!isDragEnabled)}
         className={styles.enableDragButton}
@@ -388,6 +469,18 @@ function BoardView({ socket }) {
           >
             {statuses.map((status) => (
               <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+          <select
+            value={createForm.assignedTo}
+            onChange={(e) => setCreateForm({ ...createForm, assignedTo: e.target.value })}
+            className={styles.assignedToSelect}
+          >
+            <option value="">Unassigned</option>
+            {collaborators.map((collab) => (
+              <option key={collab.userId} value={collab.userId}>
+                {collab.email}
+              </option>
             ))}
           </select>
           <button type="submit" className={styles.saveButton}>Create</button>
@@ -436,6 +529,18 @@ function BoardView({ socket }) {
                           onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
                           className={styles.dateInput}
                         />
+                        <select
+                          value={editForm.assignedTo}
+                          onChange={(e) => setEditForm({ ...editForm, assignedTo: e.target.value })}
+                          className={styles.assignedToSelect}
+                        >
+                          <option value="">Unassigned</option>
+                          {collaborators.map((collab) => (
+                            <option key={collab.userId} value={collab.userId}>
+                              {collab.email}
+                            </option>
+                          ))}
+                        </select>
                         <button type="submit" className={styles.saveButton}>Save</button>
                         <button
                           type="button"
@@ -450,6 +555,9 @@ function BoardView({ socket }) {
                         <h3 className={styles.taskTitle}>{task.title}</h3>
                         <p className={styles.taskDescription}>{task.description || 'No description'}</p>
                         <p className={styles.dueDate}>Due: {formatDate(task.dueDate)}</p>
+                        <p className={styles.assignedTo}>
+                          Assigned to: {task.assignedTo ? collaborators.find(c => c.userId === task.assignedTo)?.email || 'Unknown' : 'Unassigned'}
+                        </p>
                         {user && (
                           <div className={styles.taskActions}>
                             <button
