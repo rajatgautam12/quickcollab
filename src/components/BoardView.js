@@ -7,7 +7,7 @@ import { AuthContext } from '../context/AuthContext';
 import io from 'socket.io-client';
 import styles from './BoardView.module.css';
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://quickcollab-backend-9mdn.onrender.com';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const socket = io(API_URL, { withCredentials: true });
 
 const BoardView = () => {

@@ -43,7 +43,7 @@ function Register() {
     } catch (err) {
       const errorMessage = err.response?.data?.message || 'Registration failed';
       setError(errorMessage === 'User already exists'
-        ? `User already exists for ${email}. Try a different email, log in, or run: curl -X DELETE "https://quickcollab-backend-9mdn.onrender.com/auth/delete?email=${email}&secret=mydelete123"`
+        ? `User already exists for ${email}. Try a different email, log in, or run: curl -X DELETE "http://localhost:5000/auth/delete?email=${email}&secret=mydelete123"`
         : errorMessage);
       setEmail('');
       setPassword('');
